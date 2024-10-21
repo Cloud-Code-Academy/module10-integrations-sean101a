@@ -16,13 +16,48 @@
  * 
  * Optional Challenge: Use a trigger handler class to implement the trigger logic.
  */
-trigger ContactTrigger on Contact(before insert) {
-	// When a contact is inserted
-	// if DummyJSON_Id__c is null, generate a random number between 0 and 100 and set this as the contact's DummyJSON_Id__c value
+trigger ContactTrigger on Contact (before insert, after insert, after update) {
 
-	//When a contact is inserted
-	// if DummyJSON_Id__c is less than or equal to 100, call the getDummyJSONUserFromId API
+    // List to hold contact IDs for the @future callout after insert and update
+    List<String> contactIdsForGetCallout = new List<String>();
+    List<String> contactIdsForPostCallout = new List<String>();
 
-	//When a contact is updated
-	// if DummyJSON_Id__c is greater than 100, call the postCreateDummyJSONUser API
+    // Before Insert Logic
+    if (Trigger.isBefore && Trigger.isInsert) {
+        for (Contact con : Trigger.new) {
+            // Generate a random DummyJSON_Id__c if it's null
+            if (con.DummyJSON_Id__c == null) {
+                Integer randomId = Math.floor(Math.random() * 101).intValue(); // Generate a number between 0 and 100
+                con.DummyJSON_Id__c = String.valueOf(randomId);
+            }
+        }
+    }
+
+    // After Insert Logic
+    if (Trigger.isAfter && Trigger.isInsert) {
+        for (Contact con : Trigger.new) {
+            // If DummyJSON_Id__c is <= 100, make the getDummyJSONUserFromId API call
+            if (con.DummyJSON_Id__c != null && Integer.valueOf(con.DummyJSON_Id__c) <= 100) {
+                contactIdsForGetCallout.add(con.Id);
+            }
+        }
+        // Make asynchronous callouts after the insert event
+        if (!contactIdsForGetCallout.isEmpty()) {
+            ContactTriggerHandler.getDummyJSONUserForContacts(contactIdsForGetCallout);
+        }
+    }
+
+    // After Update Logic
+    if (Trigger.isAfter && Trigger.isUpdate) {
+        for (Contact con : Trigger.new) {
+            // If DummyJSON_Id__c is > 100, make the postCreateDummyJSONUser API call
+            if (con.DummyJSON_Id__c != null && Integer.valueOf(con.DummyJSON_Id__c) > 100) {
+                contactIdsForPostCallout.add(con.Id);
+            }
+        }
+        // Make asynchronous callouts after the update event
+        if (!contactIdsForPostCallout.isEmpty()) {
+            ContactTriggerHandler.postCreateDummyJSONUserForContacts(contactIdsForPostCallout);
+        }
+    }
 }
